@@ -1,0 +1,1 @@
+ansible-playbook -i inventory/hosts setup.yml --tags=setup-all,start

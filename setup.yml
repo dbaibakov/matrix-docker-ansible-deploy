@@ -137,10 +137,12 @@
 
     - role: galaxy/container_socket_proxy
 
+    - role: galaxy/keycloak
+
     - role: galaxy/traefik
 
     - role: galaxy/traefik_certs_dumper
-
+    
     - role: galaxy/auxiliary
 
     - when: devture_systemd_service_manager_enabled | bool
