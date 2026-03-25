@@ -278,7 +278,7 @@ devture_systemd_service_manager_services_list_auto: |
     ([{
       'name': (backup_borg_identifier + '.timer'),
       'priority': 5000,
-      'restart_necessary': true,
+      'restart_necessary': (backup_borg_restart_necessary | bool),
       'groups': ['matrix', 'backup', 'borg'],
     }] if backup_borg_enabled else [])
     +
@@ -383,14 +383,14 @@ devture_systemd_service_manager_services_list_auto: |
     ([{
       'name': 'matrix-appservice-kakaotalk.service',
       'priority': 2000,
-      'restart_necessary': true,
+      'restart_necessary': (matrix_appservice_kakaotalk_restart_necessary | bool),
       'groups': ['matrix', 'bridges', 'appservice-kakaotalk'],
     }] if matrix_appservice_kakaotalk_enabled else [])
     +
     ([{
       'name': 'matrix-appservice-kakaotalk-node.service',
       'priority': 1900,
-      'restart_necessary': true,
+      'restart_necessary': (matrix_appservice_kakaotalk_restart_necessary | bool),
       'groups': ['matrix', 'bridges', 'appservice-kakaotalk', 'appservice-kakaotalk-node'],
     }] if matrix_appservice_kakaotalk_enabled else [])
     +
@@ -404,14 +404,14 @@ devture_systemd_service_manager_services_list_auto: |
     ([{
       'name': 'matrix-wechat.service',
       'priority': 2000,
-      'restart_necessary': true,
+      'restart_necessary': (matrix_wechat_restart_necessary | bool),
       'groups': ['matrix', 'bridges', 'wechat'],
     }] if matrix_wechat_enabled else [])
     +
     ([{
       'name': 'matrix-wechat-agent.service',
       'priority': 2000,
-      'restart_necessary': true,
+      'restart_necessary': (matrix_wechat_restart_necessary | bool),
       'groups': ['matrix', 'bridges', 'wechat'],
     }] if matrix_wechat_enabled else [])
     +
@@ -621,7 +621,12 @@ devture_systemd_service_manager_services_list_auto: |
     ([{
       'name': ('matrix-' + matrix_homeserver_implementation + '.service'),
       'priority': matrix_homeserver_systemd_service_manager_priority,
-      'restart_necessary': true,
+      'restart_necessary': (
+        (matrix_conduit_restart_necessary | bool) if matrix_homeserver_implementation == 'conduit'
+        else (matrix_continuwuity_restart_necessary | bool) if matrix_homeserver_implementation == 'continuwuity'
+        else (matrix_dendrite_restart_necessary | bool) if matrix_homeserver_implementation == 'dendrite'
+        else true
+      ),
       'groups': ['matrix', 'homeservers', matrix_homeserver_implementation],
     }] if matrix_homeserver_enabled else [])
     +
@@ -684,28 +689,28 @@ devture_systemd_service_manager_services_list_auto: |
     ([{
       'name': (jitsi_identifier + '-web.service'),
       'priority': 4200,
-      'restart_necessary': true,
+      'restart_necessary': (jitsi_web_restart_necessary | bool),
       'groups': ['matrix', 'jitsi', 'jitsi-web'],
     }] if jitsi_enabled else [])
     +
     ([{
       'name': (jitsi_identifier + '-prosody.service'),
       'priority': 4000,
-      'restart_necessary': true,
+      'restart_necessary': (jitsi_prosody_restart_necessary | bool),
       'groups': ['matrix', 'jitsi', 'jitsi-prosody'],
     }] if jitsi_enabled else [])
     +
     ([{
       'name': (jitsi_identifier + '-jicofo.service'),
       'priority': 4100,
-      'restart_necessary': true,
+      'restart_necessary': (jitsi_jicofo_restart_necessary | bool),
       'groups': ['matrix', 'jitsi', 'jitsi-jicofo'],
     }] if jitsi_enabled else [])
     +
     ([{
       'name': (jitsi_identifier + '-jvb.service'),
       'priority': 4100,
-      'restart_necessary': true,
+      'restart_necessary': (jitsi_jvb_restart_necessary | bool),
       'groups': ['matrix', 'jitsi', 'jitsi-jvb'],
     }] if jitsi_enabled else [])
     +
@@ -719,7 +724,7 @@ devture_systemd_service_manager_services_list_auto: |
     ([{
       'name': (matrix_media_repo_identifier + '.service'),
       'priority': 4000,
-      'restart_necessary': true,
+      'restart_necessary': (matrix_media_repo_restart_necessary | bool),
       'groups': ['matrix', 'matrix-media-repo'],
     }] if matrix_media_repo_enabled else [])
     +
@@ -803,7 +808,7 @@ devture_systemd_service_manager_services_list_auto: |
     ([{
       'name': 'matrix-element-call.service',
       'priority': 4000,
-      'restart_necessary': true,
+      'restart_necessary': (matrix_element_call_restart_necessary | bool),
       'groups': ['matrix', 'element-call'],
     }] if matrix_element_call_enabled else [])
     +
@@ -838,14 +843,14 @@ devture_systemd_service_manager_services_list_auto: |
     ([{
       'name': 'matrix-goofys.service',
       'priority': 800,
-      'restart_necessary': true,
+      'restart_necessary': (matrix_goofys_restart_necessary | bool),
       'groups': ['matrix', 'goofys'],
     }] if (matrix_synapse_enabled and matrix_s3_media_store_enabled) else [])
     +
     ([{
       'name': 'matrix-synapse-s3-storage-provider-migrate.timer',
       'priority': 5000,
-      'restart_necessary': true,
+      'restart_necessary': (matrix_synapse_s3_storage_provider_restart_necessary | bool),
       'groups': ['matrix'],
     }] if (matrix_synapse_enabled and matrix_synapse_ext_synapse_s3_storage_provider_enabled) else [])
     +
@@ -1086,8 +1091,17 @@ matrix_authentication_service_enabled: false
 matrix_authentication_service_hostname: "{{ matrix_server_fqn_matrix }}"
 matrix_authentication_service_path_prefix: /auth
 
-matrix_authentication_service_config_database_host: "{{ postgres_connection_hostname if postgres_enabled else '' }}"
+matrix_playbook_matrix_authentication_service_uses_managed_postgres: "{{ postgres_enabled }}"
+
+matrix_authentication_service_config_database_host: "{{ matrix_authentication_service_config_database_socket_path if matrix_authentication_service_config_database_socket_enabled else (postgres_connection_hostname if matrix_playbook_matrix_authentication_service_uses_managed_postgres else '') }}"
 matrix_authentication_service_config_database_password: "{{ (matrix_homeserver_generic_secret_key + ':mas.db') | hash('sha512') | to_uuid }}"
+
+# unix socket connection
+matrix_authentication_service_config_database_socket_enabled: "{{ matrix_playbook_matrix_authentication_service_uses_managed_postgres and postgres_container_unix_socket_enabled }}"
+# path to the Postgres socket's parent dir inside the MAS container
+matrix_authentication_service_config_database_socket_path: "{{ '/run-postgres' if matrix_playbook_matrix_authentication_service_uses_managed_postgres else '' }}"
+# path to the Postgres socket on the host
+matrix_authentication_service_config_database_socket_path_host: "{{ postgres_run_path if matrix_playbook_matrix_authentication_service_uses_managed_postgres else '' }}"
 
 matrix_authentication_service_config_matrix_homeserver: "{{ matrix_domain }}"
 matrix_authentication_service_config_matrix_secret: "{{ (matrix_homeserver_generic_secret_key + ':mas.hs.secret') | hash('sha512') | to_uuid }}"
@@ -1121,7 +1135,7 @@ matrix_authentication_service_container_network: "{{ matrix_homeserver_container
 matrix_authentication_service_container_additional_networks_auto: |-
   {{
     (
-      ([postgres_container_network] if postgres_enabled and matrix_authentication_service_config_database_host == postgres_connection_hostname else [])
+      ([postgres_container_network] if (matrix_playbook_matrix_authentication_service_uses_managed_postgres and not matrix_authentication_service_config_database_socket_enabled) else [])
       +
       ([exim_relay_container_network] if (exim_relay_enabled and matrix_authentication_service_config_email_transport == 'smtp' and matrix_authentication_service_config_email_hostname == exim_relay_identifier and matrix_authentication_service_container_network != exim_relay_container_network) else [])
       +
@@ -1146,7 +1160,7 @@ matrix_authentication_service_container_labels_internal_compatibility_layer_entr
 # We'll put our dependency on the homeserver as a "want", rather than a requirement.
 matrix_authentication_service_systemd_required_services_list_auto: |
   {{
-    ([postgres_identifier ~ '.service'] if postgres_enabled and matrix_authentication_service_config_database_host == postgres_connection_hostname else [])
+    ([postgres_identifier ~ '.service'] if matrix_playbook_matrix_authentication_service_uses_managed_postgres else [])
   }}
 
 # See more information about this homeserver "want" in the comment for `matrix_authentication_service_systemd_required_services_list_auto` above.
@@ -1157,9 +1171,12 @@ matrix_authentication_service_systemd_wanted_services_list_auto: |
     ([exim_relay_identifier ~ '.service'] if (exim_relay_enabled and matrix_authentication_service_config_email_transport == 'smtp' and matrix_authentication_service_config_email_hostname == exim_relay_identifier and matrix_authentication_service_container_network != exim_relay_container_network) else [])
   }}
 
-matrix_authentication_service_syn2mas_container_network: "{{ postgres_container_network if postgres_enabled and matrix_authentication_service_config_database_host == postgres_connection_hostname else matrix_authentication_service_container_network }}"
+matrix_authentication_service_syn2mas_container_network: "{{ postgres_container_network if (matrix_playbook_matrix_authentication_service_uses_managed_postgres and not matrix_authentication_service_config_database_socket_enabled) else matrix_authentication_service_container_network }}"
 
 matrix_authentication_service_syn2mas_synapse_homeserver_config_path: "{{ matrix_synapse_config_dir_path + '/homeserver.yaml' if matrix_synapse_enabled else '' }}"
+matrix_authentication_service_syn2mas_synapse_database_socket_enabled: "{{ matrix_synapse_database_socket_enabled if matrix_synapse_enabled else false }}"
+matrix_authentication_service_syn2mas_synapse_database_socket_path: "{{ matrix_synapse_database_socket_path if matrix_synapse_enabled else '' }}"
+matrix_authentication_service_syn2mas_synapse_database_socket_path_host: "{{ matrix_synapse_database_socket_path_host if matrix_synapse_enabled else '' }}"
 
 ######################################################################
 #
@@ -3278,6 +3295,9 @@ matrix_pantalaimon_homeserver_url: "{{ matrix_addons_homeserver_client_api_url }
 ######################################################################
 
 backup_borg_enabled: false
+backup_borg_mariadb_enabled: false
+backup_borg_mysql_enabled: false
+backup_borg_mongodb_enabled: false
 
 backup_borg_identifier: matrix-backup-borg
 backup_borg_storage_archive_name_format: matrix-{now:%Y-%m-%d-%H%M%S}
@@ -4004,7 +4024,7 @@ postgres_managed_databases_auto: |
       'name': matrix_synapse_database_database,
       'username': matrix_synapse_database_user,
       'password': matrix_synapse_database_password,
-    }] if (matrix_synapse_enabled and matrix_synapse_database_host == postgres_connection_hostname) else [])
+    }] if (matrix_synapse_enabled and matrix_playbook_synapse_uses_managed_postgres) else [])
     +
     ([{
       'name': matrix_dendrite_federation_api_database,
@@ -4048,7 +4068,7 @@ postgres_managed_databases_auto: |
       'name': matrix_authentication_service_config_database_database,
       'username': matrix_authentication_service_config_database_username,
       'password': matrix_authentication_service_config_database_password,
-    }] if (matrix_authentication_service_enabled and matrix_authentication_service_config_database_host == postgres_connection_hostname) else [])
+    }] if (matrix_authentication_service_enabled and matrix_playbook_matrix_authentication_service_uses_managed_postgres) else [])
     +
     ([{
       'name': matrix_bot_matrix_reminder_bot_database_name,
@@ -4758,9 +4778,9 @@ matrix_synapse_container_additional_networks_auto: |
     (
       ([matrix_playbook_reverse_proxyable_services_additional_network] if matrix_synapse_container_labels_traefik_enabled and matrix_playbook_reverse_proxyable_services_additional_network else [])
       +
-      ([postgres_container_network] if (postgres_enabled and postgres_container_network != matrix_synapse_container_network and matrix_synapse_database_host == postgres_connection_hostname) else [])
+      ([postgres_container_network] if (matrix_playbook_synapse_uses_managed_postgres and (not matrix_synapse_database_socket_enabled) and postgres_container_network != matrix_synapse_container_network) else [])
       +
-      ([valkey_container_network] if matrix_synapse_redis_enabled and matrix_synapse_redis_host == valkey_identifier else [])
+      ([valkey_container_network] if (matrix_playbook_synapse_uses_managed_valkey and (not matrix_synapse_redis_path_enabled) and valkey_container_network != matrix_synapse_container_network) else [])
       +
       ([exim_relay_container_network] if (exim_relay_enabled and matrix_synapse_email_enabled and matrix_synapse_email_smtp_host == exim_relay_identifier and matrix_synapse_container_network != exim_relay_container_network) else [])
       +
@@ -4797,11 +4817,23 @@ matrix_synapse_container_labels_public_metrics_middleware_basic_auth_users: "{{ 
 matrix_synapse_container_labels_internal_client_api_enabled: "{{ matrix_playbook_internal_matrix_client_api_traefik_entrypoint_enabled }}"
 matrix_synapse_container_labels_internal_client_api_traefik_entrypoints: "{{ matrix_playbook_internal_matrix_client_api_traefik_entrypoint_name }}"
 
+# Playbook-level Synapse topology wiring helpers.
+matrix_playbook_synapse_uses_managed_postgres: "{{ postgres_enabled }}"
+matrix_playbook_synapse_uses_managed_valkey: "{{ matrix_synapse_redis_enabled and valkey_enabled }}"
+matrix_playbook_synapse_auto_compressor_uses_managed_postgres: "{{ matrix_playbook_synapse_uses_managed_postgres and matrix_synapse_auto_compressor_database_hostname == matrix_synapse_database_host }}"
+
 # For exposing the Synapse worker (and metrics) ports to the local host.
 matrix_synapse_workers_container_host_bind_address: "{{ matrix_playbook_service_host_bind_interface_prefix[0:-1] if (matrix_synapse_workers_enabled and matrix_playbook_service_host_bind_interface_prefix) else '' }}"
 
-matrix_synapse_database_host: "{{ postgres_connection_hostname if postgres_enabled else '' }}"
+matrix_synapse_database_host: "{{ postgres_connection_hostname if matrix_playbook_synapse_uses_managed_postgres else '' }}"
 matrix_synapse_database_password: "{{ (matrix_homeserver_generic_secret_key + ':synapse.db') | hash('sha512') | to_uuid }}"
+
+# unix socket connection
+matrix_synapse_database_socket_enabled: "{{ matrix_playbook_synapse_uses_managed_postgres and postgres_container_unix_socket_enabled }}"
+# path to the Postgres socket's parent dir inside the Synapse container
+matrix_synapse_database_socket_path: "{{ '/run-postgres' if matrix_playbook_synapse_uses_managed_postgres else '' }}"
+# path to the Postgres socket on the host, using Postgres
+matrix_synapse_database_socket_path_host: "{{ postgres_run_path if matrix_playbook_synapse_uses_managed_postgres else '' }}"
 
 matrix_synapse_macaroon_secret_key: "{{ (matrix_homeserver_generic_secret_key + ':synapse.mac') | hash('sha512') | to_uuid }}"
 
@@ -4833,9 +4865,9 @@ matrix_synapse_self_check_validate_certificates: "{{ matrix_playbook_ssl_enabled
 
 matrix_synapse_systemd_required_services_list_auto: |
   {{
-    ([postgres_identifier ~ '.service'] if (postgres_enabled and postgres_container_network != matrix_synapse_container_network and matrix_synapse_database_host == postgres_connection_hostname) else [])
+    ([postgres_identifier ~ '.service'] if (matrix_playbook_synapse_uses_managed_postgres and postgres_container_network != matrix_synapse_container_network) else [])
     +
-    ([valkey_identifier ~ '.service'] if matrix_synapse_redis_enabled and matrix_synapse_redis_host == valkey_identifier else [])
+    ([valkey_identifier ~ '.service'] if matrix_playbook_synapse_uses_managed_valkey else [])
     +
     (['matrix-goofys.service'] if matrix_s3_media_store_enabled else [])
     +
@@ -4851,8 +4883,17 @@ matrix_synapse_systemd_wanted_services_list_auto: |
 
 # Synapse workers (used for parallel load-scaling) need Redis for IPC.
 matrix_synapse_redis_enabled: "{{ valkey_enabled }}"
-matrix_synapse_redis_host: "{{ valkey_identifier if valkey_enabled else '' }}"
-matrix_synapse_redis_password: "{{ valkey_connection_password if valkey_enabled else '' }}"
+matrix_synapse_redis_host: "{{ valkey_identifier if matrix_playbook_synapse_uses_managed_valkey else '' }}"
+matrix_synapse_redis_password: "{{ valkey_connection_password if matrix_playbook_synapse_uses_managed_valkey else '' }}"
+
+# unix socket connection
+matrix_synapse_redis_path_enabled: "{{ matrix_playbook_synapse_uses_managed_valkey }}"
+# path to the Redis socket's parent dir inside the Synapse container
+matrix_synapse_redis_path: "{{ '/run-valkey' if matrix_playbook_synapse_uses_managed_valkey else '' }}"
+# redis socket filename
+matrix_synapse_redis_path_socket: "{{ '/valkey.sock' if matrix_playbook_synapse_uses_managed_valkey else '' }}"
+# path to the Redis socket on the host, using Valkey
+matrix_synapse_redis_path_host: "{{ valkey_run_path if matrix_playbook_synapse_uses_managed_valkey else '' }}"
 
 matrix_synapse_container_extra_arguments_auto: "{{ matrix_homeserver_container_extra_arguments_auto }}"
 matrix_synapse_app_service_config_files_auto: "{{ matrix_homeserver_app_service_config_files_auto }}"
@@ -4880,6 +4921,8 @@ matrix_synapse_matrix_authentication_service_secret: "{{ matrix_authentication_s
 matrix_synapse_experimental_features_msc4108_enabled: "{{ matrix_authentication_service_enabled and not matrix_authentication_service_migration_in_progress }}"
 
 matrix_synapse_experimental_features_msc4140_enabled: "{{ matrix_rtc_enabled }}"
+
+matrix_synapse_experimental_features_msc4143_enabled: "{{ matrix_rtc_enabled }}"
 
 matrix_synapse_experimental_features_msc4222_enabled: "{{ matrix_rtc_enabled }}"
 
@@ -4948,7 +4991,7 @@ matrix_synapse_auto_compressor_container_image_registry_prefix_upstream: "{{ mat
 
 matrix_synapse_auto_compressor_container_image_self_build: "{{ matrix_architecture not in ['arm64', 'amd64'] }}"
 
-matrix_synapse_auto_compressor_container_network: "{{ (postgres_container_network if (postgres_enabled and matrix_synapse_auto_compressor_database_hostname == matrix_synapse_database_host and matrix_synapse_database_host == postgres_connection_hostname) else 'matrix-synapse-auto-compressor') }}"
+matrix_synapse_auto_compressor_container_network: "{{ (postgres_container_network if matrix_playbook_synapse_auto_compressor_uses_managed_postgres else 'matrix-synapse-auto-compressor') }}"
 
 matrix_synapse_auto_compressor_database_username: "{{ matrix_synapse_database_user if matrix_synapse_enabled else '' }}"
 matrix_synapse_auto_compressor_database_password: "{{ matrix_synapse_database_password if matrix_synapse_enabled else '' }}"
@@ -4958,7 +5001,7 @@ matrix_synapse_auto_compressor_database_name: "{{ matrix_synapse_database_databa
 
 matrix_synapse_auto_compressor_systemd_required_services_list_auto: |
   {{
-    ([postgres_identifier ~ '.service'] if (matrix_synapse_auto_compressor_container_network == postgres_container_network) else [])
+    ([postgres_identifier ~ '.service'] if matrix_playbook_synapse_auto_compressor_uses_managed_postgres else [])
   }}
 
 ######################################################################
@@ -5198,11 +5241,10 @@ prometheus_node_exporter_container_network: "{{ matrix_monitoring_container_netw
 
 prometheus_node_exporter_container_additional_networks_auto: "{{ [matrix_playbook_reverse_proxyable_services_additional_network] if matrix_playbook_reverse_proxyable_services_additional_network else [] }}"
 
-prometheus_node_exporter_container_labels_traefik_enabled: "{{ matrix_metrics_exposure_enabled }}"
-prometheus_node_exporter_container_labels_traefik_docker_network: "{{ matrix_playbook_reverse_proxyable_services_additional_network }}"
-prometheus_node_exporter_container_labels_traefik_entrypoints: "{{ traefik_entrypoint_primary }}"
-prometheus_node_exporter_container_labels_traefik_tls_certResolver: "{{ traefik_certResolver_primary }}"
-
+prometheus_node_exporter_container_labels_metrics_enabled: "{{ matrix_metrics_exposure_enabled }}"
+prometheus_node_exporter_container_labels_metrics_docker_network: "{{ matrix_playbook_reverse_proxyable_services_additional_network }}"
+prometheus_node_exporter_container_labels_metrics_entrypoints: "{{ traefik_entrypoint_primary }}"
+prometheus_node_exporter_container_labels_metrics_tls_certResolver: "{{ traefik_certResolver_primary }}"
 prometheus_node_exporter_container_labels_metrics_middleware_basic_auth_enabled: "{{ matrix_metrics_exposure_http_basic_auth_enabled }}"
 prometheus_node_exporter_container_labels_metrics_middleware_basic_auth_users: "{{ matrix_metrics_exposure_http_basic_auth_users }}"
 
@@ -5238,14 +5280,13 @@ prometheus_postgres_exporter_container_additional_networks: |
   {{
     ([postgres_container_network] if (postgres_enabled and prometheus_postgres_exporter_database_hostname == postgres_connection_hostname and prometheus_postgres_exporter_container_network != postgres_container_network) else [])
     +
-    ([matrix_playbook_reverse_proxyable_services_additional_network] if matrix_playbook_reverse_proxyable_services_additional_network and prometheus_postgres_exporter_container_labels_traefik_enabled else [])
+    ([matrix_playbook_reverse_proxyable_services_additional_network] if matrix_playbook_reverse_proxyable_services_additional_network and prometheus_postgres_exporter_container_labels_metrics_enabled else [])
   }}
 
-prometheus_postgres_exporter_container_labels_traefik_enabled: "{{ matrix_metrics_exposure_enabled }}"
-prometheus_postgres_exporter_container_labels_traefik_docker_network: "{{ matrix_playbook_reverse_proxyable_services_additional_network }}"
-prometheus_postgres_exporter_container_labels_traefik_entrypoints: "{{ traefik_entrypoint_primary }}"
-prometheus_postgres_exporter_container_labels_traefik_tls_certResolver: "{{ traefik_certResolver_primary }}"
-
+prometheus_postgres_exporter_container_labels_metrics_enabled: "{{ matrix_metrics_exposure_enabled }}"
+prometheus_postgres_exporter_container_labels_metrics_docker_network: "{{ matrix_playbook_reverse_proxyable_services_additional_network }}"
+prometheus_postgres_exporter_container_labels_metrics_entrypoints: "{{ traefik_entrypoint_primary }}"
+prometheus_postgres_exporter_container_labels_metrics_tls_certResolver: "{{ traefik_certResolver_primary }}"
 prometheus_postgres_exporter_container_labels_metrics_middleware_basic_auth_enabled: "{{ matrix_metrics_exposure_http_basic_auth_enabled }}"
 prometheus_postgres_exporter_container_labels_metrics_middleware_basic_auth_users: "{{ matrix_metrics_exposure_http_basic_auth_users }}"
 
@@ -5289,14 +5330,13 @@ prometheus_nginxlog_exporter_container_network_deletion_enabled: false
 
 prometheus_nginxlog_exporter_container_additional_networks_auto: |-
   {{
-    ([matrix_playbook_reverse_proxyable_services_additional_network] if (matrix_playbook_reverse_proxyable_services_additional_network and prometheus_nginxlog_exporter_container_labels_traefik_enabled) else [])
+    ([matrix_playbook_reverse_proxyable_services_additional_network] if (matrix_playbook_reverse_proxyable_services_additional_network and prometheus_nginxlog_exporter_container_labels_metrics_enabled) else [])
   }}
 
-prometheus_nginxlog_exporter_container_labels_traefik_enabled: "{{ matrix_metrics_exposure_enabled }}"
-prometheus_nginxlog_exporter_container_labels_traefik_docker_network: "{{ matrix_playbook_reverse_proxyable_services_additional_network }}"
-prometheus_nginxlog_exporter_container_labels_traefik_entrypoints: "{{ traefik_entrypoint_primary }}"
-prometheus_nginxlog_exporter_container_labels_traefik_tls_certResolver: "{{ traefik_certResolver_primary }}"
-
+prometheus_nginxlog_exporter_container_labels_metrics_enabled: "{{ matrix_metrics_exposure_enabled }}"
+prometheus_nginxlog_exporter_container_labels_metrics_docker_network: "{{ matrix_playbook_reverse_proxyable_services_additional_network }}"
+prometheus_nginxlog_exporter_container_labels_metrics_entrypoints: "{{ traefik_entrypoint_primary }}"
+prometheus_nginxlog_exporter_container_labels_metrics_tls_certResolver: "{{ traefik_certResolver_primary }}"
 prometheus_nginxlog_exporter_container_labels_metrics_middleware_basic_auth_enabled: "{{ matrix_metrics_exposure_http_basic_auth_enabled }}"
 prometheus_nginxlog_exporter_container_labels_metrics_middleware_basic_auth_users: "{{ matrix_metrics_exposure_http_basic_auth_users }}"
 
@@ -5791,7 +5831,7 @@ matrix_user_creator_users_auto: |
       'username': matrix_bot_baibot_config_user_mxid_localpart,
       'initial_password': matrix_bot_baibot_config_user_password,
       'initial_type': 'bot',
-    }] if matrix_bot_baibot_enabled else [])
+    }] if matrix_bot_baibot_enabled and ((matrix_bot_baibot_config_user_password | default('', true) | string | length) > 0) else [])
     +
     ([{
       'username': matrix_bot_matrix_reminder_bot_matrix_user_id_localpart,
@@ -5874,7 +5914,10 @@ matrix_user_verification_service_container_http_host_bind_port: "{{  '' if (jits
 # URL exposed in the docker network
 matrix_user_verification_service_container_url: "http://{{  matrix_user_verification_service_container_name }}:3000"
 
-matrix_user_verification_service_uvs_homeserver_url: "{{ matrix_addons_homeserver_client_api_url }}"
+# Using `matrix_addons_homeserver_client_api_url` would not work here,
+# because `matrix-traefik:8008` (matrix-internal-client-api) does not expose any `/_synapse` paths.
+# UVS accesses `/_synapse/admin/v1/rooms` API to check room membership.
+matrix_user_verification_service_uvs_homeserver_url: "{{ matrix_homeserver_container_url }}"
 
 # We connect via the container network (private IPs), so we need to disable IP checks
 matrix_user_verification_service_uvs_disable_ip_blacklist: "{{ matrix_synapse_enabled }}"
